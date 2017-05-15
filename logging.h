@@ -1,4 +1,5 @@
-MIT License
+/*
+The MIT License (MIT)
 
 Copyright (c) 2017 MH Lim
 
@@ -19,3 +20,25 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+*/
+
+#ifndef MY_LOGGING_H
+#define MY_LOGGING_H
+
+#include <stdio.h>
+
+#ifndef LOGGING_EXPORT
+#define LOGGING_EXPORT
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+LOGGING_EXPORT void logging_display_memory_contents(void *start, void *last, FILE *fp);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
