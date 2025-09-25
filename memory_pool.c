@@ -11,12 +11,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)0U - 1U)
+#endif
+
 typedef struct pool_info_s
 {
 	const char *name;
 	size_t size;
 	void *mutex;
-	size_t allocation;
+	size_t allocation_count;
 	pool_exception_handler_s heap_corruption_handler;
 	pool_exception_handler_s memory_leak_handler;
 	pool_exception_handler_s dangling_pointer_handler;
@@ -51,7 +55,7 @@ static void *pool_get_last_valid_block(void *pool)
 
 static int pool_memory_address_is_valid(void *pool, void *memory)
 {
-	void *start, *last;
+	void *start = NULL, *last = NULL;
 	start = pool_get_first_valid_address((pool_info_s*) pool);
 	last = pool_get_last_valid_address((pool_info_s*) pool);
 	assert(memory >= start);
@@ -60,7 +64,7 @@ static int pool_memory_address_is_valid(void *pool, void *memory)
 	return (memory >= start && memory < last && ((size_t) memory & mask) == 0);
 }
 
-static size_t pool_calc_block_size(size_t required)
+static size_t pool_calculate_block_size(size_t required)
 {
 	if (required && (required & mask) == 0)
 		return required;
@@ -112,8 +116,8 @@ static void pool_deactivate_check(block_info_s *block)
 
 static void *pool_block_head_is_corrupted(const block_info_s *block)
 {
-	size_t i;
-	for (i = 0; i < sizeof block->pattern; i++)
+	size_t i = 0U;
+	for (; i < sizeof block->pattern; i++)
 		if (block->pattern[i] != 0xCC)
 			return (void*) &(block->pattern[i]);
 	return NULL;
@@ -121,9 +125,9 @@ static void *pool_block_head_is_corrupted(const block_info_s *block)
 
 static void *pool_block_tail_is_corrupted(const block_info_s *block)
 {
-	size_t i;
+	size_t i = 0U;
 	block_info_s *next = pool_get_next_block(block);
-	for (i = 0; i < sizeof block->pattern; i++)
+	for (; i < sizeof block->pattern; i++)
 		if (next->pattern[i] != 0xCC)
 			return (void*) &(next->pattern[i]);
 	return NULL;
@@ -131,7 +135,7 @@ static void *pool_block_tail_is_corrupted(const block_info_s *block)
 
 static int pool_detect_heap_corruption(const pool_info_s *pool, const block_info_s *block)
 {
-	void *start, *last, *error_location;
+	void *start = NULL, *last = NULL, *error_location = NULL;
 	if ((error_location = pool_block_head_is_corrupted(block)) != NULL) {
 		size_t block_size = pool_get_block_size(block);
 		if (block_size > pool->size)
@@ -141,16 +145,14 @@ static int pool_detect_heap_corruption(const pool_info_s *pool, const block_info
 		last = (void*) (((unsigned char *) (block + 1)) + block_size - 1);
 		if (pool->heap_corruption_handler) {
 			pool->heap_corruption_handler(pool->name, start, last, error_location);
-			return 1;
 		} else {
 			if (pool->name[0] != '\0') fprintf(stdout, "%s: ", pool->name);
 			fprintf(stdout, "Heap corruption occurred at location %p.\n", error_location);
 #ifdef MEMORY_POOL_WITH_ERROR_LOGGING
 			logging_display_memory_contents(start, last, stdout);
 #endif
-			free((void*) pool);
-			abort();
 		}
+		return 1;
 	}
 
 	if ((error_location = pool_block_tail_is_corrupted(block)) != NULL) {
@@ -159,16 +161,14 @@ static int pool_detect_heap_corruption(const pool_info_s *pool, const block_info
 
 		if (pool->heap_corruption_handler) {
 			pool->heap_corruption_handler(pool->name, start, last, error_location);
-			return 1;
 		} else {
 			if (pool->name[0] != '\0') fprintf(stdout, "%s: ", pool->name);
 			fprintf(stdout, "Heap corruption occurred at location %p.\n", error_location);
 #ifdef MEMORY_POOL_WITH_ERROR_LOGGING
 			logging_display_memory_contents(start, last, stdout);
 #endif
-			free((void*) pool);
-			abort();
 		}
+		return 1;
 	}
 	return 0;
 }
@@ -176,7 +176,7 @@ static int pool_detect_heap_corruption(const pool_info_s *pool, const block_info
 static int pool_detect_repeated_free(const pool_info_s *pool, const block_info_s *block)
 {
 	if (pool_block_is_available(block)) {
-		void *start, *last, *error_location;
+		void *start = NULL, *last = NULL, *error_location = NULL;
 		start = (void*) block;
 		error_location = (void*) block;
 		last = (void*) ((unsigned char*) (block + 1) + pool_get_block_size(block) - 1);
@@ -186,7 +186,7 @@ static int pool_detect_repeated_free(const pool_info_s *pool, const block_info_s
 			if (pool->name[0] != '\0') fprintf(stdout, "%s: ", pool->name);
 			fprintf(stdout, "Memory at %p has already been released to the pool.\n", error_location);
 #ifdef MEMORY_POOL_WITH_ERROR_LOGGING
-			logging_display_memory_contents(start, last,stdout);
+			logging_display_memory_contents(start, last, stdout);
 #endif
 		}
 		return 1;
@@ -196,10 +196,10 @@ static int pool_detect_repeated_free(const pool_info_s *pool, const block_info_s
 
 static int pool_check_block_size(const pool_info_s *pool, const block_info_s *block)
 {
-	void *start, *last, *error_location;
+	void *start = NULL, *last = NULL, *error_location = NULL;
 	size_t block_size = pool_get_block_size(block);
 	if (block_size <= pool->size)
-		return 1;
+		return 1; /* OK */
 	start = (void*) block;
 	last = (void*) (((unsigned char*) (block + 1)) + block_size);
 	error_location = (void*) &(block->size);
@@ -207,23 +207,22 @@ static int pool_check_block_size(const pool_info_s *pool, const block_info_s *bl
 		pool->heap_corruption_handler(pool->name, start, last, error_location);
 	} else {
 		if (pool->name[0] != '\0') fprintf(stdout, "%s: ", pool->name);
-		fprintf(stdout, "The block size at %p (%ld) is more than the pool size (%ld).\n", error_location, block_size, pool->size);
+		fprintf(stdout, "The block size at %p (%lu) is more than the pool size (%lu).\n",
+			error_location, (unsigned long) block_size, (unsigned long) pool->size);
 #ifdef MEMORY_POOL_WITH_ERROR_LOGGING
 		logging_display_memory_contents(start, last, stdout);		
 #endif
-		free((void*) pool);
-		abort();
 	}
-	return 0;
+	return 0; /* NOT OK */
 }
 
 void *pool_create(size_t size)
 {
-	void *pool;
-	size_t actual_size;
-	unsigned char *p;
+	void *pool = NULL;
+	size_t actual_size = 0U;
+	unsigned char *p = NULL;
 
-	size = pool_calc_block_size(size);
+	size = pool_calculate_block_size(size);
 	actual_size = sizeof(pool_info_s) + sizeof(block_info_s) + size + sizeof(size_t);
 
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
@@ -252,7 +251,7 @@ void *pool_create(size_t size)
 #else
 	pool_info->mutex = NULL;
 #endif
-	pool_info->allocation = 0;
+	pool_info->allocation_count = 0;
 
 	block_info_s *block = (block_info_s*) (pool_info + 1);
 	block->size = size;
@@ -264,11 +263,11 @@ void *pool_create(size_t size)
 
 void pool_destroy(void *pool)
 {
-	pool_info_s *pool_info;
-	block_info_s *block_info;
-	void *last_valid_block;
+	pool_info_s *pool_info = NULL;
+	block_info_s *block_info = NULL;
+	void *last_valid_block = NULL;
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
-	void *mutex;
+	void *mutex = NULL;
 #endif
 
 	if (!pool) return;
@@ -282,10 +281,10 @@ void pool_destroy(void *pool)
 	mutex_lock(mutex);
 #endif
 
-	if (pool_info->allocation > 0) {
-		int more_than_1_block = (pool_info->allocation > 1);
+	if (pool_info->allocation_count > 0) {
+		int more_than_1_block = (pool_info->allocation_count > 1);
 		if (pool_info->name[0] != '\0') fprintf(stdout, "%s: ", pool_info->name);
-		printf("%ld allocated block%s not released.\n", pool_info->allocation, (more_than_1_block ? "s were" : " was"));
+		printf("%lu allocated block%s not released.\n", (unsigned long)  pool_info->allocation_count, (more_than_1_block ? "s were" : " was"));
 	}
 
 	while ((void*) block_info <= last_valid_block) {
@@ -341,12 +340,12 @@ static void *pool_malloc_internal(void *pool, size_t size)
 	pool_info_s *pool_info = (pool_info_s*) pool;
 	block_info_s *block_info = (block_info_s*) (pool_info + 1);
 	void *last_valid_block = pool_get_last_valid_block(pool);
-	size = pool_calc_block_size(size);
+	size = pool_calculate_block_size(size);
 
 	while ((void*) block_info <= last_valid_block) {
-		unsigned char *p;
-		size_t block_size;
-		block_info_s *next;
+		unsigned char *p = NULL;
+		size_t block_size = 0U;
+		block_info_s *next = NULL;
 
 		if (pool_detect_heap_corruption(pool_info, block_info))
 			return NULL;
@@ -365,7 +364,7 @@ static void *pool_malloc_internal(void *pool, size_t size)
 
 			pool_activate_check(block_info);
 			pool_set_block_as_occupied(block_info);
-			pool_info->allocation++;
+			pool_info->allocation_count++;
 			return (void*) ((unsigned char*) (block_info + 1));
 		}
 
@@ -378,7 +377,7 @@ static void *pool_malloc_internal(void *pool, size_t size)
 		pool_activate_check(next);
 		pool_set_block_size(next, block_size - size - sizeof(block_info_s));
 		pool_set_block_as_free(next);
-		pool_info->allocation++;
+		pool_info->allocation_count++;
 		return (void*) p;
 	}
 
@@ -387,8 +386,18 @@ static void *pool_malloc_internal(void *pool, size_t size)
 
 static void *pool_calloc_internal(void *pool, size_t count, size_t element_size)
 {
-	size_t size = count * element_size;
-	void *mem = pool_malloc_internal(pool, count * element_size);
+	size_t size = 0U;
+	void *mem = NULL;
+	if (count > 0U && element_size > 0U) {
+		const size_t max_count = SIZE_MAX / element_size;
+		const size_t remainder = SIZE_MAX % element_size;
+		const int size_is_OK = (max_count > count) || ((max_count == count) && (remainder == 0U));
+		assert(size_is_OK);
+		if (!size_is_OK)
+			return NULL;
+	}
+	size = count * element_size;
+	mem = pool_malloc_internal(pool, size);
 	if (mem)
 		memset(mem, 0, size);
 	return mem;
@@ -396,29 +405,29 @@ static void *pool_calloc_internal(void *pool, size_t count, size_t element_size)
 
 static void pool_free_internal(void *pool, void *memory)
 {
-	pool_info_s *pool_info;
-	block_info_s *block_info, *next;
-	void *last_valid_block;
-	int check1, check2, check3;
+	pool_info_s *pool_info = NULL;
+	block_info_s *block_info = NULL, *next = NULL;
+	void *last_valid_block = NULL;
+	int heap_corruption_detected = 0, repeated_free_detected = 0, block_size_is_correct = 0;
 
 	if (!memory || !pool_memory_address_is_valid(pool, memory))
-		return ;
+		return;
 
 	pool_info = (pool_info_s*) pool;
 	block_info = ((block_info_s*) memory) - 1;
-	check1 = !pool_detect_heap_corruption(pool_info, block_info);
-	check2 = !pool_detect_repeated_free(pool_info, block_info);
-	check3 = pool_check_block_size(pool_info, block_info);
-	if (!check1 || !check2 || !check3)
+	heap_corruption_detected = pool_detect_heap_corruption(pool_info, block_info);
+	repeated_free_detected = pool_detect_repeated_free(pool_info, block_info);
+	block_size_is_correct = pool_check_block_size(pool_info, block_info);
+	if (heap_corruption_detected || repeated_free_detected || !block_size_is_correct)
 		return;
 
 	pool_set_block_as_free(block_info);
-	pool_info->allocation--;
+	pool_info->allocation_count--;
 	last_valid_block = pool_get_last_valid_block(pool);
 	next = pool_get_next_block(block_info);
 
 	if ((void*) next <= last_valid_block && pool_block_is_available(next)) {
-		size_t current_block_size, next_block_size;
+		size_t current_block_size = 0U, next_block_size = 0U;
 		current_block_size = pool_get_block_size(block_info);
 		next_block_size = pool_get_block_size(next);
 		pool_set_block_size(block_info, current_block_size + next_block_size + sizeof *next);
@@ -509,12 +518,15 @@ pool_exception_handler_s pool_set_dangling_pointer_handler(void *pool, pool_exce
 
 void pool_set_name(void *pool, const char *name)
 {
+	assert(pool != NULL);
+	assert(name != NULL);
 	if (pool && name)
 		((pool_info_s*) pool)->name = name;
 }
 
 const char *pool_get_name(void *pool)
 {
+	assert(pool != NULL);
 	if (pool)
 		return ((pool_info_s*) pool)->name;
 	return "";
@@ -523,6 +535,7 @@ const char *pool_get_name(void *pool)
 void *pool_malloc(void *pool, size_t size)
 {
 	void *mem = NULL;
+	assert(pool != NULL);
 	if (pool) {
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
 		void *mutex = ((pool_info_s*) pool)->mutex;
@@ -543,6 +556,7 @@ void *pool_malloc(void *pool, size_t size)
 void *pool_calloc(void *pool, size_t count, size_t element_size)
 {
 	void *mem = NULL;
+	assert(pool != NULL);
 	if (pool) {
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
 		void *mutex = ((pool_info_s*) pool)->mutex;
@@ -563,6 +577,7 @@ void *pool_calloc(void *pool, size_t count, size_t element_size)
 void *pool_realloc(void *pool, void *memory, size_t new_size)
 {
 	void *mem = NULL;
+	assert(pool != NULL);
 	if (pool) {
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
 		void *mutex = ((pool_info_s*) pool)->mutex;
@@ -582,6 +597,7 @@ void *pool_realloc(void *pool, void *memory, size_t new_size)
 
 void pool_free(void *pool, void *memory)
 {
+	assert(pool != NULL);
 	if (pool) {
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
 		void *mutex = ((pool_info_s*) pool)->mutex;
@@ -596,6 +612,7 @@ void pool_free(void *pool, void *memory)
 
 void pool_defragment(void *pool)
 {
+	assert(pool != NULL);
 	if (pool) {
 #ifdef MEMORY_POOL_WITH_THREAD_SAFETY
 		void *mutex = ((pool_info_s*) pool)->mutex;

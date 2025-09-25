@@ -21,7 +21,7 @@ int main(void)
 {
 	void *pool;
 	int i;
-	void *mem[BLOCK_COUNT] = {0};
+	void *mem[BLOCK_COUNT] = {NULL};
 
 	srand(time(NULL));
 	pool = pool_create(2048);
@@ -33,7 +33,7 @@ int main(void)
 	pool_set_name(pool, "example");
 
 	for (i = 0; i < BLOCK_COUNT; i++) {
-		mem[i] = pool_malloc(pool, 32);
+		mem[i] = pool_calloc(pool, 32, sizeof(char));
 		if (mem[i]) {
 			set_random_text((char*) mem[i], 32);
 			printf("%s\n", (char*) mem[i]);
