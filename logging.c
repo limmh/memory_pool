@@ -1,12 +1,12 @@
 #include "logging.h"
 #include <ctype.h>
 
-void logging_display_memory_contents(void *start, void *last, FILE *fp)
+void logging_display_memory_contents(const void *start, const void *last, FILE *fp)
 {
 	size_t byte_count, group_count, i, n;
 	const size_t bytes_per_row = 32;
-	unsigned char *p = (unsigned char*) start;
-	byte_count = (unsigned char*) last - (unsigned char*) start + 1;
+	const unsigned char *p = (const unsigned char*) start;
+	byte_count = (const unsigned char*) last - (const unsigned char*) start + 1;
 	group_count = byte_count / bytes_per_row;
 
 	for (i = 0; i < group_count; i++) {

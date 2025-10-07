@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-LOGGING_EXPORT void logging_display_memory_contents(void *start, void *last, FILE *fp);
+LOGGING_EXPORT void logging_display_memory_contents(const void *start, const void *last, FILE *fp);
 
 #ifdef __cplusplus
 }

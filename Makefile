@@ -1,4 +1,4 @@
-CC=gcc
+CC=gcc -std=c89
 CFLAGS=-Wall
 
 all: 	memory_pool_test \
@@ -10,23 +10,23 @@ all: 	memory_pool_test \
 	logging.a \
 	mutex.a
 
-memory_pool_test: memory_pool_test.c memory_pool.h memory_pool.a
-	$(CC) $(CFLAGS) -o memory_pool_test memory_pool_test.c -L. memory_pool.a
+memory_pool_test: memory_pool_test.c memory_pool.h memory_pool.a mutex.a
+	$(CC) $(CFLAGS) -o memory_pool_test memory_pool_test.c -L. memory_pool.a mutex.a
 
-memory_pool_test_dp: memory_pool_test.c memory_pool.h memory_pool.a
-	$(CC) $(CFLAGS) -o memory_pool_test_dp memory_pool_test.c -DENABLE_DANGLING_POINTER -L. memory_pool.a
+memory_pool_test_dp: memory_pool_test.c memory_pool.h memory_pool.a mutex.a
+	$(CC) $(CFLAGS) -o memory_pool_test_dp memory_pool_test.c -DMEMORY_POOL_TEST_ENABLE_DANGLING_POINTER -L. memory_pool.a mutex.a
 
-memory_pool_test_hc: memory_pool_test.c memory_pool.h memory_pool.a
-	$(CC) $(CFLAGS) -o memory_pool_test_hc memory_pool_test.c -DENABLE_HEAP_CORRUPTION -L. memory_pool.a
+memory_pool_test_hc: memory_pool_test.c memory_pool.h memory_pool.a mutex.a
+	$(CC) $(CFLAGS) -o memory_pool_test_hc memory_pool_test.c -DMEMORY_POOL_TEST_ENABLE_HEAP_CORRUPTION -L. memory_pool.a mutex.a
 
-memory_pool_test_leak: memory_pool_test.c memory_pool.h memory_pool.a
-	$(CC) $(CFLAGS) -o memory_pool_test_leak memory_pool_test.c -DENABLE_MEMORY_LEAK -L. memory_pool.a
+memory_pool_test_leak: memory_pool_test.c memory_pool.h memory_pool.a mutex.a
+	$(CC) $(CFLAGS) -o memory_pool_test_leak memory_pool_test.c -DMEMORY_POOL_TEST_ENABLE_MEMORY_LEAK -L. memory_pool.a mutex.a
  
-memory_pool.a: memory_pool.o logging.o mutex.o
-	ar rcs memory_pool.a memory_pool.o logging.o mutex.o
+memory_pool.a: memory_pool.o logging.o
+	ar rcs memory_pool.a memory_pool.o logging.o
 
 memory_pool.o: memory_pool.c memory_pool.h logging.h mutex.h
-	$(CC) $(CFLAGS) -c memory_pool.c -DMEMORY_POOL_WITH_THREAD_SAFETY -DMEMORY_POOL_WITH_ERROR_LOGGING
+	$(CC) $(CFLAGS) -c memory_pool.c -DMEMORY_POOL_WITH_ERROR_LOGGING
 
 logging.a: logging.o
 	ar rcs logging.a logging.o
