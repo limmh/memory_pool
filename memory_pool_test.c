@@ -96,7 +96,7 @@ int main(void)
 
 		pool_result = pool_create_with_allocator_or_mutex_support(1024U, &pool_allocator, &pool_mutex);
 		pool = pool_result.pool;
-		printf("Actual pool size: %lu bytes\n", pool_result.actual_size);
+		printf("Actual pool size: %lu bytes\n", (unsigned long) pool_result.actual_size);
 	}
 #else
 	pool = pool_create(1024U);
