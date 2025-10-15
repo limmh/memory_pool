@@ -27,7 +27,7 @@ typedef struct pool_mutex_type {
 } pool_mutex_type;
 
 typedef struct pool_result_type {
-	void *pool; /**/
+	void *pool;
 	size_t actual_size; /* actual size including overhead in bytes */ 
 } pool_result_type;
 
